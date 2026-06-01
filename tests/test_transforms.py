@@ -294,3 +294,24 @@ def test_scalogram_provenance_records_wavelet():
     prov = ScalogramTransform().provenance()
     assert prov["scalogram_wavelet"] == "db4"
     assert prov["scalogram_level"] == 8
+
+
+def test_annotation_recon_fields_are_honest_per_view():
+    # Flag-2 Option A: STFT-bridged views record real fft params; the wavelet-native
+    # scalogram leaves them None (never asserts an STFT it didn't use) and carries its
+    # true engine in transform_params.
+    from python_ref.gui.session import SpectrogramSession
+
+    t = np.arange(16_384) / SR
+    y = (0.5 * np.sin(2 * np.pi * 800.0 * t) + 0.5 * np.sin(2 * np.pi * 6000.0 * t))
+
+    stft_sess = SpectrogramSession(y, SR)
+    stft_sess.add_rectangle(0.05, 0.30, 1000, 5000, label="e")
+    a_stft = stft_sess.to_annotations()[0]
+    assert a_stft.fft_size == STFT.n_fft and a_stft.window_type == STFT.window
+
+    scal_sess = SpectrogramSession(y, SR, transform=ScalogramTransform())
+    scal_sess.add_rectangle(0.05, 0.30, 1000, 5000, label="e")
+    a_scal = scal_sess.to_annotations()[0]
+    assert a_scal.fft_size is None and a_scal.hop_length is None and a_scal.window_type is None
+    assert a_scal.transform_params["scalogram_wavelet"] == "db4"

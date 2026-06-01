@@ -181,9 +181,12 @@ class SpectrogramSession:
                 freq_min_hz=f_lo,
                 freq_max_hz=f_hi,
                 extraction_mode=layer.extraction_mode.value,
-                fft_size=prov.get("fft_size", self.params.n_fft),
-                hop_length=prov.get("hop_length", self.params.hop_length),
-                window_type=prov.get("window_type", self.params.window),
+                # No STFT fallback: a view whose provenance omits these reconstructs without
+                # an STFT (e.g. scalogram), so the fields stay None rather than asserting a
+                # window/hop that was never applied.
+                fft_size=prov.get("fft_size"),
+                hop_length=prov.get("hop_length"),
+                window_type=prov.get("window_type"),
                 transform_params=layer_meta,
                 notes=layer.notes,
                 created_at=layer.created_at,

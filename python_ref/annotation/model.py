@@ -9,8 +9,6 @@ from uuid import uuid4
 
 import numpy as np
 
-from ..params import STFT
-
 # ColorBrewer Set1 — chosen for distinguishable overlapping regions (design §5.2).
 LAYER_COLORS = (
     "#E41A1C", "#377EB8", "#4DAF4A", "#FF7F00",
@@ -81,9 +79,13 @@ class Annotation:
     freq_max_hz: float = 0.0
     mask_type: str = "rectangle"
     extraction_mode: str = ExtractionMode.POSITIVE.value
-    fft_size: int = STFT.n_fft
-    hop_length: int = STFT.hop_length
-    window_type: str = STFT.window
+    # Reconstruction provenance is populated ONLY when the audio is actually produced via
+    # an STFT (STFT/CQT/chroma views). Wavelet-native views (scalogram) leave these None
+    # and record their true engine in ``transform_params`` — these fields must never assert
+    # an STFT that was not used (design §11; per-domain recon record is the Option-B follow-up).
+    fft_size: int | None = None
+    hop_length: int | None = None
+    window_type: str | None = None
     n_mels: int | None = None
     transform_params: dict = field(default_factory=dict)  # view-specific provenance (e.g. CQT fmin/n_bins)
     annotator: str = ""
