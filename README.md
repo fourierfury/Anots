@@ -32,6 +32,7 @@ Early development. Current focus: the DSP reference core and its validation harn
 | Validation harness (`1e-5` comparison, round-trip, analytic self-checks) | Done |
 | Annotation model, masks, reconstruction, padding, sidecar export | Done |
 | GUI (PyQt6 + matplotlib): spectrogram, rectangle select, playback, export | Done |
+| Transform abstraction (Qt-free core) + STFT / CQT / Chromagram views | Done |
 | Native Rust + C++ core | Planned |
 
 ## Locked DSP parameters

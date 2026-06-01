@@ -1,4 +1,10 @@
-"""Qt-free annotation session: loaded audio, its STFT, layers, and operations."""
+"""Qt-free annotation session: loaded audio, its transform, layers, and operations.
+
+The session is transform-agnostic: it holds a :class:`~python_ref.transforms.Transform`
+(STFT by default) and routes every domain-specific operation — forward analysis,
+display, reconstruction, coordinate mapping, provenance — through it. Swapping in a
+CQT or scalogram transform changes none of the code below.
+"""
 
 from __future__ import annotations
 
@@ -17,25 +23,36 @@ from ..annotation import (
     feather,
     layer_color,
     pad,
-    reconstruct,
     rectangle_mask,
     write_csv,
     write_sidecar,
 )
 from ..annotation.padding import PaddingMode
-from ..dsp import amplitude_to_db, stft
 from ..params import STFT, StftParams
-from . import coords
+from ..transforms import StftTransform, Transform
 
 
 class SpectrogramSession:
-    def __init__(self, y: np.ndarray, sr: int, source_file: str = "", params: StftParams = STFT):
+    def __init__(
+        self,
+        y: np.ndarray,
+        sr: int,
+        source_file: str = "",
+        params: StftParams = STFT,
+        transform: Transform | None = None,
+    ):
         self.y = np.asarray(y, dtype=np.float64)
         self.sr = sr
         self.source_file = source_file
-        self.params = params
-        self.stft = stft(self.y, params)
+        self.transform = transform or StftTransform(params)
+        self.params = params  # back-compat: STFT params for the dataset profile
+        self.coeffs = self.transform.forward(self.y, sr)
         self.layers: list[Layer] = []
+
+    @property
+    def stft(self) -> np.ndarray:
+        """Back-compat alias for the coefficient matrix (STFT when that transform)."""
+        return self.coeffs
 
     @classmethod
     def load(cls, path: str | Path, params: StftParams = STFT) -> "SpectrogramSession":
@@ -48,7 +65,7 @@ class SpectrogramSession:
 
     def magnitude_db(self) -> np.ndarray:
         """dB-scaled magnitude spectrogram for display."""
-        return amplitude_to_db(np.abs(self.stft))
+        return self.transform.display_db(self.coeffs)
 
     def add_rectangle(
         self,
@@ -63,12 +80,12 @@ class SpectrogramSession:
         taper_bins: int = 8,
     ) -> Layer:
         """Create a feathered rectangular layer from a time/frequency selection."""
-        frames = sorted((coords.time_to_frame(t0, self.sr, self.params),
-                         coords.time_to_frame(t1, self.sr, self.params)))
-        bins = sorted((coords.hz_to_bin(f0_hz, self.sr, self.params),
-                       coords.hz_to_bin(f1_hz, self.sr, self.params)))
+        frames = sorted((self.transform.time_to_col(t0, self.sr),
+                         self.transform.time_to_col(t1, self.sr)))
+        bins = sorted((self.transform.value_to_row(f0_hz, self.sr),
+                       self.transform.value_to_row(f1_hz, self.sr)))
 
-        mask = rectangle_mask(self.stft.shape[0], self.stft.shape[1],
+        mask = rectangle_mask(self.coeffs.shape[0], self.coeffs.shape[1],
                               freq_bins=tuple(bins), frame_bins=tuple(frames))
         layer = Layer(
             mask=feather(mask, taper_bins),
@@ -83,24 +100,30 @@ class SpectrogramSession:
         return layer
 
     def reconstruct_layer(self, layer: Layer) -> np.ndarray:
-        return reconstruct(self.stft, layer.mask, layer.extraction_mode, self.params, length=len(self.y))
+        return self.transform.reconstruct(
+            self.y, self.coeffs, layer.mask, layer.extraction_mode, self.sr, length=len(self.y)
+        )
 
     def _bounds_samples(self, mask: np.ndarray) -> tuple[int, int]:
         """Sample range covered by a layer's active frames."""
         active = np.where(mask.any(axis=0))[0]
         if not len(active):
             return 0, len(self.y)
-        start = coords.frame_to_time(int(active[0]), self.sr, self.params)
-        end = coords.frame_to_time(int(active[-1]) + 1, self.sr, self.params)
+        start = self.transform.col_to_time(int(active[0]), self.sr)
+        end = self.transform.col_to_time(int(active[-1]) + 1, self.sr)
         return int(start * self.sr), min(int(end * self.sr), len(self.y))
 
     def to_annotations(self) -> list[Annotation]:
+        prov = self.transform.provenance()
+        _RECON = ("fft_size", "hop_length", "window_type")
+        view_params = {k: v for k, v in prov.items() if k not in _RECON}
         anns = []
         for layer in self.layers:
             start, end = self._bounds_samples(layer.mask)
             active_bins = np.where(layer.mask.any(axis=1))[0]
-            f_lo = coords.bin_to_hz(int(active_bins[0]), self.sr, self.params) if len(active_bins) else 0.0
-            f_hi = coords.bin_to_hz(int(active_bins[-1]), self.sr, self.params) if len(active_bins) else 0.0
+            f_lo = self.transform.row_to_value(int(active_bins[0]), self.sr) if len(active_bins) else 0.0
+            f_hi = self.transform.row_to_value(int(active_bins[-1]), self.sr) if len(active_bins) else 0.0
+            layer_meta = {**view_params, **self.transform.layer_params(layer.mask, self.sr)}
             anns.append(Annotation(
                 source_file=self.source_file,
                 sample_rate=self.sr,
@@ -109,12 +132,14 @@ class SpectrogramSession:
                 label=layer.label,
                 label_class=layer.label_class,
                 confidence=layer.confidence,
+                view=self.transform.name,
                 freq_min_hz=f_lo,
                 freq_max_hz=f_hi,
                 extraction_mode=layer.extraction_mode.value,
-                fft_size=self.params.n_fft,
-                hop_length=self.params.hop_length,
-                window_type=self.params.window,
+                fft_size=prov.get("fft_size", self.params.n_fft),
+                hop_length=prov.get("hop_length", self.params.hop_length),
+                window_type=prov.get("window_type", self.params.window),
+                transform_params=layer_meta,
                 notes=layer.notes,
                 created_at=layer.created_at,
             ))

@@ -13,6 +13,7 @@ from matplotlib.widgets import RectangleSelector
 from PyQt6 import QtWidgets
 
 from ..params import STFT
+from .render import SpectrogramRenderer
 from .session import SpectrogramSession
 
 
@@ -20,6 +21,7 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
     def __init__(self, session: SpectrogramSession):
         super().__init__()
         self.session = session
+        self.renderer = SpectrogramRenderer(session.transform)
         self._selection: tuple[float, float, float, float] | None = None
         self.setWindowTitle(f"Anots — {Path(session.source_file).name or 'untitled'}")
 
@@ -63,13 +65,7 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         return container
 
     def _draw_spectrogram(self) -> None:
-        db = self.session.magnitude_db()
-        self.ax.imshow(
-            db, origin="lower", aspect="auto", cmap="viridis",
-            extent=(0.0, self.session.duration_s, 0.0, self.session.sr / 2),
-        )
-        self.ax.set_xlabel("Time (s)")
-        self.ax.set_ylabel("Frequency (Hz)")
+        self.renderer.draw(self.ax, self.session.coeffs, self.session.sr, self.session.duration_s)
         self.figure.tight_layout()
 
     def _on_select(self, press, release) -> None:
@@ -93,9 +89,9 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         active_f = np.where(layer.mask.any(axis=1))[0]
         if not len(active_t) or not len(active_f):
             return
-        sr, p = self.session.sr, self.session.params
-        x0, x1 = active_t[0] * p.hop_length / sr, active_t[-1] * p.hop_length / sr
-        y0, y1 = active_f[0] * sr / p.n_fft, active_f[-1] * sr / p.n_fft
+        sr, tf = self.session.sr, self.session.transform
+        x0, x1 = tf.col_to_time(active_t[0], sr), tf.col_to_time(active_t[-1], sr)
+        y0, y1 = tf.row_to_display_y(active_f[0], sr), tf.row_to_display_y(active_f[-1], sr)
         self.ax.add_patch(plt_rect((x0, y0), x1 - x0, y1 - y0, layer.color))
         self.figure.canvas.draw_idle()
 

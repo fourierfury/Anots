@@ -85,6 +85,7 @@ class Annotation:
     hop_length: int = STFT.hop_length
     window_type: str = STFT.window
     n_mels: int | None = None
+    transform_params: dict = field(default_factory=dict)  # view-specific provenance (e.g. CQT fmin/n_bins)
     annotator: str = ""
     notes: str = ""
     exported_clip_raw: str | None = None
@@ -136,6 +137,7 @@ class Annotation:
             "hop_length": self.hop_length,
             "window_type": self.window_type,
             "n_mels": self.n_mels,
+            "transform_params": self.transform_params,
             "annotator": self.annotator,
             "notes": self.notes,
             "exported_clip_raw": self.exported_clip_raw,

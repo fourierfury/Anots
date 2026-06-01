@@ -21,7 +21,14 @@ gui = ["sounddevice>=0.4", "PyQt6>=6.6", "matplotlib>=3.8"]
 test = ["pytest>=8.0"]
 
 [tool.setuptools]
-packages = ["python_ref", "python_ref.dsp", "python_ref.validation"]
+packages = [
+    "python_ref",
+    "python_ref.dsp",
+    "python_ref.transforms",
+    "python_ref.annotation",
+    "python_ref.gui",
+    "python_ref.validation",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

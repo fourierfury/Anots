@@ -37,6 +37,35 @@ class MelParams:
 
 
 @dataclass(frozen=True)
+class CqtParams:
+    """Constant-Q transform (design §4.3.4). One bin per semitone.
+
+    ``hop_length`` matches ``StftParams`` so CQT and STFT frames align: a selection
+    drawn on the CQT maps frame-for-frame onto the STFT for exact reconstruction
+    (the reference's CQT reconstruction path; see ``transforms.cqt``).
+    """
+
+    fmin: float = 32.70319566257483  # C1
+    n_bins: int = 84  # 7 octaves
+    bins_per_octave: int = 12  # one bin = one semitone
+    hop_length: int = 512
+
+
+@dataclass(frozen=True)
+class ChromaParams:
+    """Chromagram (design §4.3.5). Energy folded into 12 pitch classes.
+
+    ``hop_length`` matches ``StftParams`` so a pitch-class selection maps frame-for-frame
+    onto the STFT comb filter used for reconstruction (see ``transforms.chroma``).
+    """
+
+    fmin: float = 32.70319566257483  # C1
+    n_chroma: int = 12
+    bins_per_octave: int = 36
+    hop_length: int = 512
+
+
+@dataclass(frozen=True)
 class MfccParams:
     n_mfcc: int = 40
     dct_type: int = 2
@@ -50,5 +79,7 @@ class DbParams:
 
 STFT = StftParams()
 MEL = MelParams()
+CQT = CqtParams()
+CHROMA = ChromaParams()
 MFCC = MfccParams()
 DB = DbParams()
