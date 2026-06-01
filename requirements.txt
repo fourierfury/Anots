@@ -5,6 +5,7 @@ numpy>=2.0
 scipy>=1.13
 librosa>=0.10
 soundfile>=0.12
+PyWavelets>=1.5  # undecimated wavelet (SWT/MRA) for the exact-inverse scalogram view
 
 # Audio playback and GUI (Phase 4 — not yet required by the DSP core / tests)
 # sounddevice>=0.4

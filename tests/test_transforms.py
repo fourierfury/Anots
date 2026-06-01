@@ -18,6 +18,7 @@ from python_ref.transforms import (
     TRANSFORMS,
     ChromaTransform,
     CqtTransform,
+    ScalogramTransform,
     StftTransform,
     Transform,
 )
@@ -204,3 +205,92 @@ def test_chroma_layer_params_records_pitch_classes():
 def test_chroma_freq_fields_are_na_sentinel():
     # row_to_value returns the N/A sentinel (0): a pitch class has no single Hz.
     assert ChromaTransform().row_to_value(9, 22_050) == 0.0
+
+
+# --- Scalogram (undecimated wavelet — genuinely exact inverse, NOT STFT-bridged) ---
+
+
+@pytest.fixture
+def two_tones() -> np.ndarray:
+    # 800 Hz and 6 kHz: land in well-separated dyadic bands (verified in the spike).
+    n = 16_384
+    t = np.arange(n) / SR
+    return (0.5 * np.sin(2 * np.pi * 800.0 * t)
+            + 0.5 * np.sin(2 * np.pi * 6000.0 * t)).astype(np.float64)
+
+
+def test_scalogram_forward_shape(two_tones):
+    tf = ScalogramTransform()
+    coeffs = tf.forward(two_tones, SR)
+    assert coeffs.shape == (tf.params.level + 1, len(two_tones))  # bands x samples, full time res
+
+
+def test_scalogram_bands_are_additive(two_tones):
+    # The defining property: bands sum to the signal -> reconstruction is exact.
+    tf = ScalogramTransform()
+    coeffs = tf.forward(two_tones, SR)
+    assert np.max(np.abs(coeffs.sum(axis=0) - two_tones)) < 1e-9
+
+
+def test_scalogram_reconstruction_is_genuinely_exact(two_tones):
+    # Unlike CQT/chroma (STFT-bridged, ~1e-5), the wavelet inverse is ~1e-13 AND needs
+    # no interior trim — positive + negative == the WHOLE original signal, edges included.
+    tf = ScalogramTransform()
+    coeffs = tf.forward(two_tones, SR)
+    mask = rectangle_mask(*coeffs.shape, freq_bins=(3, 6), frame_bins=(2000, 9000))
+    pos = tf.reconstruct(two_tones, coeffs, mask, ExtractionMode.POSITIVE, SR, length=len(two_tones))
+    neg = tf.reconstruct(two_tones, coeffs, mask, ExtractionMode.NEGATIVE, SR, length=len(two_tones))
+    assert np.max(np.abs(pos + neg - two_tones)) < 1e-9   # no interior slice needed
+
+
+def test_scalogram_band_isolates_frequency(two_tones):
+    # Selecting the band over 6 kHz keeps the 6 kHz tone and suppresses 800 Hz.
+    tf = ScalogramTransform()
+    coeffs = tf.forward(two_tones, SR)
+    r_hi = tf.value_to_row(6000.0, SR)
+    r_lo = tf.value_to_row(800.0, SR)
+    assert r_hi != r_lo
+    mask = np.zeros(coeffs.shape)
+    mask[r_hi, :] = 1.0
+    clip = tf.reconstruct(two_tones, coeffs, mask, sr=SR, length=len(two_tones))
+
+    spec = np.abs(np.fft.rfft(clip))
+    f = np.fft.rfftfreq(len(clip), 1.0 / SR)
+    amp = lambda f0: spec[np.argmin(np.abs(f - f0))]
+    assert amp(6000) > 10 * amp(800)
+
+
+def test_scalogram_preserves_transient_timing():
+    # The view's reason to exist (design §13): an impulse stays a sharp impulse through
+    # the undecimated wavelet round-trip — full time resolution, unlike an STFT hop.
+    n = 8192
+    y = np.zeros(n)
+    y[4000] = 1.0
+    tf = ScalogramTransform()
+    coeffs = tf.forward(y, SR)
+    full = np.ones(coeffs.shape)
+    clip = tf.reconstruct(y, coeffs, full, sr=SR, length=n)
+    assert int(np.argmax(np.abs(clip))) == 4000          # peak stays at the exact sample
+    assert np.max(np.abs(clip - y)) < 1e-9
+
+
+def test_scalogram_coord_mapping_is_monotonic():
+    tf = ScalogramTransform()
+    freqs = [tf.row_to_value(r, SR) for r in range(tf.params.level + 1)]
+    assert freqs == sorted(freqs)                        # row 0 lowest -> rises with index
+    assert tf.value_to_row(tf.row_to_value(4, SR), SR) == 4
+
+
+def test_scalogram_handles_arbitrary_length():
+    # Odd, non-power-of-two length must still work (reflect-pad then trim).
+    y = np.random.default_rng(0).standard_normal(6789)
+    tf = ScalogramTransform()
+    coeffs = tf.forward(y, SR)
+    assert coeffs.shape[1] == 6789
+    assert np.max(np.abs(coeffs.sum(axis=0) - y)) < 1e-9
+
+
+def test_scalogram_provenance_records_wavelet():
+    prov = ScalogramTransform().provenance()
+    assert prov["scalogram_wavelet"] == "db4"
+    assert prov["scalogram_level"] == 8

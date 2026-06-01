@@ -66,6 +66,20 @@ class ChromaParams:
 
 
 @dataclass(frozen=True)
+class ScalogramParams:
+    """Undecimated (stationary) wavelet scalogram (design §4.3.6).
+
+    The undecimated transform is a perfect-reconstruction filter bank, so unlike the
+    continuous CWT it inverts exactly (~1e-13). ``wavelet`` must be orthogonal
+    (Daubechies/Symlets/Coiflets) for that guarantee; ``level`` dyadic detail bands plus
+    one low-pass residual give ``level + 1`` rows. See ``transforms.scalogram``.
+    """
+
+    wavelet: str = "db4"
+    level: int = 8
+
+
+@dataclass(frozen=True)
 class MfccParams:
     n_mfcc: int = 40
     dct_type: int = 2
@@ -81,5 +95,6 @@ STFT = StftParams()
 MEL = MelParams()
 CQT = CqtParams()
 CHROMA = ChromaParams()
+SCALOGRAM = ScalogramParams()
 MFCC = MfccParams()
 DB = DbParams()
