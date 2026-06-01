@@ -1,8 +1,4 @@
-"""Shared pytest fixtures: the reference signals.
-
-Signals are generated on demand (and cached for the session) so the test suite is
-self-contained — no need to run the generator script first.
-"""
+"""Shared fixtures: the six reference signals, generated on demand."""
 
 from __future__ import annotations
 
@@ -16,7 +12,6 @@ SR = refgen.SR
 
 @pytest.fixture(scope="session")
 def signals() -> dict[str, np.ndarray]:
-    """All six reference signals as float arrays, keyed by short name."""
     return {
         "sine": refgen.sine_1khz(),
         "chirp": refgen.chirp_20hz_20khz(),

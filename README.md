@@ -28,10 +28,10 @@ Early development. Current focus: the DSP reference core and its validation harn
 
 | Component | State |
 |-----------|-------|
-| DSP reference core (STFT, ISTFT, mel, MFCC) | In progress |
-| Validation harness (`1e-5` comparison, round-trip, analytic self-checks) | In progress |
-| Annotation data model + reconstruction | Planned |
-| GUI (PyQt6 + matplotlib) | Planned |
+| DSP reference core (STFT, ISTFT, mel, MFCC) | Done |
+| Validation harness (`1e-5` comparison, round-trip, analytic self-checks) | Done |
+| Annotation model, masks, reconstruction, padding, sidecar export | Done |
+| GUI (PyQt6 + matplotlib): spectrogram, rectangle select, playback, export | Done |
 | Native Rust + C++ core | Planned |
 
 ## Locked DSP parameters
@@ -61,6 +61,10 @@ python tests/reference_signals/generate.py
 
 # Run the validation suite
 pytest
+
+# Launch the annotation GUI (needs the optional GUI deps)
+pip install -e ".[gui]"
+python -m python_ref.gui path/to/audio.wav
 ```
 
 ## License
