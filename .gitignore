@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# PRIVATE — pending privacy scrub before any public release.
+# These files contain references to a private downstream project and its
+# deployment context. They are kept local and MUST NOT be pushed to the
+# public repository until reviewed and scrubbed.
+# ---------------------------------------------------------------------------
+/examples/
+/progress.md
+/Anots_Design.md
+/skills/
+/sessions/
+/Audio_Engineering_Mastery_Path.md
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------------------------------------------------------------------------
+# Generated reference signals (regenerate with tests/reference_signals/generate.py)
+# ---------------------------------------------------------------------------
+/tests/reference_signals/*.wav
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+*.swp
+.idea/
+.vscode/

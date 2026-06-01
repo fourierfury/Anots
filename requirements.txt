@@ -1,0 +1,15 @@
+# Anots Python reference prototype — runtime dependencies.
+# Pinned to floors known to provide cp314 wheels; bump as needed.
+
+numpy>=2.0
+scipy>=1.13
+librosa>=0.10
+soundfile>=0.12
+
+# Audio playback and GUI (Phase 4 — not yet required by the DSP core / tests)
+# sounddevice>=0.4
+# PyQt6>=6.6
+# matplotlib>=3.8
+
+# Test tooling
+pytest>=8.0
