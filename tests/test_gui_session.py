@@ -109,6 +109,27 @@ def test_qt_shell_imports():
     assert importlib.import_module("python_ref.gui.app") is not None
 
 
+def test_energy_bounds_finds_active_block():
+    # "Fit to content" helper: the row/col window where energy lives, for zoom.
+    from python_ref.gui.render import energy_bounds
+
+    db = np.full((64, 100), -80.0)
+    db[20:30, 40:60] = 0.0  # a bright block
+    assert energy_bounds(db, top_db=60.0) == (20, 29, 40, 59)
+    assert energy_bounds(db, top_db=0.0) is None  # nothing strictly above the peak
+
+
+def test_occupied_band_captures_central_energy():
+    # Auto frequency-fit: the 99%-energy band, robust to a thin noise floor elsewhere.
+    from python_ref.gui.render import occupied_band
+
+    mag = np.full((100, 50), 1e-4)   # faint broadband floor
+    mag[40:45, :] = 1.0              # the real signal sits in rows 40–44
+    lo, hi = occupied_band(mag, central=0.99)
+    assert 39 <= lo <= 41 and 43 <= hi <= 45     # band hugs the signal, ignores the floor
+    assert occupied_band(np.zeros((10, 10))) is None
+
+
 def test_add_rectangle_display_resolves_view_units():
     # On a log view, a GUI selection's y is a BAND INDEX, not Hz. add_rectangle_display
     # must select those bands — where add_rectangle (Hz) would mis-map them to band 0.
@@ -126,6 +147,20 @@ def test_add_rectangle_display_resolves_view_units():
     # which is exactly why the GUI must use the display path, not the Hz path.
     hz = sess.add_rectangle(0.05, 0.30, 2, 6, label="hz", taper_bins=0)
     assert hz.mask.sum() == 0
+
+
+def test_add_lasso_fills_a_freehand_shape(session):
+    # The "draw any shape" tool: an outline in (s, Hz) fills a non-rectangular region.
+    pts = [(0.3, 1000), (0.9, 6000), (1.4, 1500), (0.6, 800)]
+    layer = session.add_lasso(pts, label="shape", taper_bins=0)
+    assert layer.tool_used.value == "lasso"
+    active = layer.mask > 0
+    assert active.sum() > 0
+    # Not a filled rectangle: the polygon leaves corners of its bounding box empty.
+    rows = np.where(active.any(axis=1))[0]
+    cols = np.where(active.any(axis=0))[0]
+    bbox = (rows.max() - rows.min() + 1) * (cols.max() - cols.min() + 1)
+    assert active.sum() < bbox
 
 
 def test_add_ridge_display_on_scalogram():

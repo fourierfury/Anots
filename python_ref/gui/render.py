@@ -12,6 +12,47 @@ import numpy as np
 from ..transforms.base import Transform
 
 
+def energy_bounds(db: np.ndarray, top_db: float = 60.0) -> tuple[int, int, int, int] | None:
+    """Inclusive ``(row_lo, row_hi, col_lo, col_hi)`` of bins within ``top_db`` of the peak.
+
+    Used by "fit to content": the frequency/time window where the signal actually lives,
+    so the view can zoom to it instead of showing a mostly-empty full-range axis. Returns
+    ``None`` for silence (nothing within ``top_db`` of the peak). Works on any view's dB
+    matrix — the caller maps rows/cols to display units through the transform.
+    """
+    peak = float(db.max())
+    strong = db > (peak - top_db)
+    if not strong.any():
+        return None
+    rows = np.where(strong.any(axis=1))[0]
+    cols = np.where(strong.any(axis=0))[0]
+    return int(rows[0]), int(rows[-1]), int(cols[0]), int(cols[-1])
+
+
+def occupied_band(mag: np.ndarray, central: float = 0.99) -> tuple[int, int] | None:
+    """Row range ``(lo, hi)`` holding ``central`` of the per-frequency energy.
+
+    This is the **occupied bandwidth** (the FCC 99%-power definition): total per-row energy
+    is accumulated from both ends, and the band is cut where each tail reaches
+    ``(1-central)/2`` of the total — so thin noise tails and empty high-frequency space are
+    excluded. Far more robust than a dB-from-peak threshold for "where does the signal live".
+    Returns ``None`` for silence. ``mag`` is a magnitude matrix ``(n_freq, n_frames)``; it
+    works in any view (rows are this view's frequency/scale bins).
+    """
+    power = (np.asarray(mag, dtype=np.float64) ** 2).sum(axis=1)  # energy per frequency row
+    total = float(power.sum())
+    if total <= 0.0:
+        return None
+    cum = np.cumsum(power)
+    tail = (1.0 - central) / 2.0
+    lo = int(np.searchsorted(cum, tail * total))
+    hi = int(np.searchsorted(cum, (1.0 - tail) * total))
+    n = len(power)
+    lo = max(0, min(lo, n - 1))
+    hi = max(lo, min(hi, n - 1))
+    return lo, hi
+
+
 class SpectrogramRenderer:
     """Configures a matplotlib axis to display a transform's coefficient matrix."""
 

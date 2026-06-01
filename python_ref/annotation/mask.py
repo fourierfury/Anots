@@ -20,6 +20,43 @@ def rectangle_mask(
     return mask
 
 
+def polygon_mask(
+    n_freq: int,
+    n_frames: int,
+    verts: list[tuple[float, float]],
+) -> np.ndarray:
+    """Binary mask of a filled closed polygon (the Freehand Lasso, design §6.4).
+
+    ``verts`` are ``(col, row)`` = ``(frame, freq_bin)`` vertices tracing the outline. The
+    interior is filled by even-odd ray casting, vectorised over the polygon's bounding box.
+    Fewer than 3 vertices yields an empty mask.
+    """
+    mask = np.zeros((n_freq, n_frames), dtype=np.float64)
+    if len(verts) < 3:
+        return mask
+    xs = [v[0] for v in verts]
+    ys = [v[1] for v in verts]
+    c0, c1 = max(0, int(np.floor(min(xs)))), min(n_frames, int(np.ceil(max(xs))) + 1)
+    r0, r1 = max(0, int(np.floor(min(ys)))), min(n_freq, int(np.ceil(max(ys))) + 1)
+    if c0 >= c1 or r0 >= r1:
+        return mask
+
+    cc, rr = np.meshgrid(np.arange(c0, c1), np.arange(r0, r1))
+    x = cc.ravel().astype(np.float64)
+    y = rr.ravel().astype(np.float64)
+    inside = np.zeros(x.shape, dtype=bool)
+    j = len(verts) - 1
+    for i in range(len(verts)):
+        xi, yi = verts[i]
+        xj, yj = verts[j]
+        straddles = (yi > y) != (yj > y)
+        x_cross = (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi
+        inside ^= straddles & (x < x_cross)
+        j = i
+    mask[r0:r1, c0:c1] = inside.reshape(r1 - r0, c1 - c0).astype(np.float64)
+    return mask
+
+
 def feather(mask: np.ndarray, taper_bins: int = 8) -> np.ndarray:
     """Hann-ramp the mask interior near its boundary; hard edges ring on ISTFT (§12)."""
     binary = mask > 0

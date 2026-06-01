@@ -13,6 +13,7 @@ from python_ref.annotation import (
     PaddingMode,
     feather,
     pad,
+    polygon_mask,
     preset_samples,
     read_sidecar,
     reconstruct,
@@ -32,6 +33,18 @@ def test_rectangle_mask_region():
     assert m.shape == (64, 100)
     assert m.sum() == 10 * 45
     assert m[15, 25] == 1.0 and m[0, 0] == 0.0
+
+
+def test_polygon_mask_fills_triangle():
+    # Right triangle with legs of 10 (region x>=0, y>=0, x+y<=10); area ~ 50.
+    m = polygon_mask(32, 32, [(0, 0), (10, 0), (0, 10)])  # (col, row) vertices
+    assert m[1, 1] == 1.0          # well inside
+    assert m[8, 8] == 0.0          # past the hypotenuse
+    assert 30 < m.sum() < 70       # roughly half the 10x10 bounding box
+
+
+def test_polygon_mask_too_few_points_is_empty():
+    assert polygon_mask(16, 16, [(1, 1), (5, 5)]).sum() == 0.0
 
 
 def test_feather_softens_edges_only():

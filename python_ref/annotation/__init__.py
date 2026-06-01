@@ -1,7 +1,7 @@
 """Annotation layer model, mask reconstruction, padding, and persistence."""
 
 from .export import DatasetProfile, read_sidecar, sidecar_path, write_csv, write_sidecar
-from .mask import feather, rectangle_mask
+from .mask import feather, polygon_mask, rectangle_mask
 from .brush import energy_brush
 from .model import Annotation, ExtractionMode, Layer, Tool, layer_color
 from .overlap import OverlapLevel, OverlapWarning, classify, detect_overlaps, iou
@@ -21,6 +21,7 @@ __all__ = [
     "OverlapLevel",
     "OverlapWarning",
     "rectangle_mask",
+    "polygon_mask",
     "ridge_path",
     "tube_mask",
     "energy_brush",

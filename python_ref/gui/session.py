@@ -26,6 +26,7 @@ from ..annotation import (
     feather,
     layer_color,
     pad,
+    polygon_mask,
     rectangle_mask,
     ridge_path,
     tube_mask,
@@ -141,6 +142,36 @@ class SpectrogramSession:
             label_class=label_class,
             confidence=confidence,
             tool_used=Tool.RECTANGLE,
+            extraction_mode=extraction_mode,
+            color=layer_color(len(self.layers)),
+        )
+        self.layers.append(layer)
+        return layer
+
+    def add_lasso(
+        self,
+        points: list[tuple[float, float]],
+        label: str,
+        label_class: str = "",
+        confidence: float = 1.0,
+        extraction_mode: ExtractionMode = ExtractionMode.POSITIVE,
+        taper_bins: int = 8,
+    ) -> Layer:
+        """Freehand lasso: fill the closed outline drawn by ``points`` (design §6.4).
+
+        ``points`` is the drag path in display units ``(seconds, display_y)``; it is mapped
+        through the active transform to ``(frame, freq_bin)`` vertices and filled, so any
+        shape can be drawn in any view.
+        """
+        verts = [(self.transform.time_to_col(t, self.sr), self.transform.display_y_to_row(y, self.sr))
+                 for t, y in points]
+        mask = polygon_mask(self.coeffs.shape[0], self.coeffs.shape[1], verts)
+        layer = Layer(
+            mask=feather(mask, taper_bins),
+            label=label,
+            label_class=label_class,
+            confidence=confidence,
+            tool_used=Tool.LASSO,
             extraction_mode=extraction_mode,
             color=layer_color(len(self.layers)),
         )
