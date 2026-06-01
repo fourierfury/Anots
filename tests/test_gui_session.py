@@ -128,6 +128,19 @@ def test_add_rectangle_display_resolves_view_units():
     assert hz.mask.sum() == 0
 
 
+def test_add_ridge_display_on_scalogram():
+    # Display-coordinate ridge (band index, as a GUI click gives) on a 9-band view.
+    from python_ref.transforms import ScalogramTransform
+
+    t = np.arange(16_384) / SR
+    y = 0.5 * np.sin(2 * np.pi * 3000.0 * t)
+    sess = SpectrogramSession(y, SR, transform=ScalogramTransform())
+    layer = sess.add_ridge_display(0.05, 6, 0.30, 4, label="r")
+    assert layer.tool_used.value == "ridge"
+    assert layer.mask.shape == sess.coeffs.shape
+    assert layer.mask.max() > 0.0
+
+
 def test_build_session_opens_named_view(tmp_path):
     import soundfile as sf
 

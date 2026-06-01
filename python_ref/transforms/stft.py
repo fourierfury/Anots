@@ -54,9 +54,13 @@ class StftTransform(Transform):
     def row_to_value(self, row: int, sr: int) -> float:
         return bin_to_hz(row, sr, self.params)
 
-    def provenance(self) -> dict:
+    def reconstruction(self) -> dict:
         return {
+            "method": "istft",
             "fft_size": self.params.n_fft,
             "hop_length": self.params.hop_length,
             "window_type": self.params.window,
         }
+
+    def provenance(self) -> dict:
+        return {}  # the STFT view's only provenance is its reconstruction method

@@ -67,6 +67,16 @@ def test_same_point_returns_single_bin():
     assert ridge_path(energy, (5, 64), (5, 64)) == [(5, 64)]
 
 
+def test_k_larger_than_band_count():
+    # The scalogram has only ~9 bands; default K (20) exceeds n_freq. Must not crash
+    # and the path must stay in range (regression for the GUI-on-scalogram bug).
+    energy = np.random.default_rng(0).random((9, 200)) + 0.01
+    path = ridge_path(energy, (0, 4), (199, 6), k=20)
+    assert len(path) == 200
+    assert all(0 <= f < 9 for _, f in path)
+    assert path[0] == (0, 4) and path[-1] == (199, 6)
+
+
 # --- tube mask ---------------------------------------------------------------
 
 def test_tube_mask_peaks_on_path_and_falls_off():

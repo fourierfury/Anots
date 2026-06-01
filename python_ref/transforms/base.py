@@ -74,8 +74,25 @@ class Transform(ABC):
         """Row index -> the y-axis value (Hz) at that row."""
 
     @abstractmethod
+    def reconstruction(self) -> dict:
+        """Tagged record of HOW a selection's audio is reconstructed (design §11).
+
+        Shape: ``{"method": <str>, ...method-specific params}``. The ``method`` field is a
+        discriminator so heterogeneous views serialize into one schema — STFT/CQT/chroma
+        all reconstruct via ISTFT (``"istft"`` + fft/hop/window), the scalogram via the
+        undecimated wavelet (``"swt_mra"`` + wavelet/level). The native port maps this to
+        a ``serde`` tagged enum. Distinct from :meth:`provenance`, which records how the
+        view was *displayed/selected*, not how audio was *produced*.
+        """
+
+    @abstractmethod
     def provenance(self) -> dict:
-        """Transform parameters recorded in each annotation (design §10.1)."""
+        """View-specific display/selection params for the annotation's ``transform_params``.
+
+        How the view was computed and selected on (e.g. CQT ``fmin``/``n_bins``) — NOT how
+        audio is reconstructed (that is :meth:`reconstruction`). Empty for views whose only
+        provenance is their reconstruction method (STFT, scalogram).
+        """
 
     def layer_params(self, mask: np.ndarray, sr: int) -> dict:
         """Per-selection view metadata merged into the annotation's transform_params.

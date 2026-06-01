@@ -144,12 +144,14 @@ class ScalogramTransform(Transform):
         labels = [f"{f:.0f} Hz" for f in self._band_freqs(n_bands, sr)]
         return (positions, labels)
 
-    def provenance(self) -> dict:
-        # Reconstruction is wavelet-native — there is no fft_size/hop/window here, so
-        # these keys land in the annotation's transform_params (the honest record of how
-        # the audio was produced). See progress.md: the Annotation model still defaults
-        # its fft_* fields, a wart to clean up when it gains per-domain recon provenance.
+    def reconstruction(self) -> dict:
+        # Wavelet-native reconstruction (§11): no fft/hop/window — the undecimated wavelet
+        # bands ARE the reconstruction, so the record is honestly a wavelet method.
         return {
-            "scalogram_wavelet": self.params.wavelet,
-            "scalogram_level": self.params.level,
+            "method": "swt_mra",
+            "wavelet": self.params.wavelet,
+            "level": self.params.level,
         }
+
+    def provenance(self) -> dict:
+        return {}  # wavelet/level are the reconstruction record; no separate view params

@@ -61,12 +61,13 @@ def ridge_path(
         arg = np.full(n_freq, -1, dtype=int)
         for d in range(-k, k + 1):  # d = f_target - f_prev
             shifted = np.full(n_freq, np.inf)
-            if d > 0:
-                shifted[d:] = dp[: n_freq - d]
-            elif d < 0:
-                shifted[: n_freq + d] = dp[-d:]
-            else:
+            if d == 0:
                 shifted = dp.copy()
+            elif 0 < d < n_freq:
+                shifted[d:] = dp[: n_freq - d]
+            elif -n_freq < d < 0:
+                shifted[: n_freq + d] = dp[-d:]
+            # |d| >= n_freq: the jump exceeds the band count, no valid source -> all inf
             cand = shifted + lam * abs(d) / k
             improve = cand < best
             best[improve] = cand[improve]

@@ -120,13 +120,18 @@ class CqtTransform(Transform):
         labels = [librosa.hz_to_note(self.row_to_value(p, sr)) for p in positions]
         return (positions, labels)
 
-    def provenance(self) -> dict:
-        # Both the CQT view params and the STFT reconstruction params are recorded:
-        # the audio really is produced via this STFT (so fft_size/hop/window are true).
+    def reconstruction(self) -> dict:
+        # CQT audio is produced through the exact STFT engine (§11), so the reconstruction
+        # record is an honest ISTFT record — the CQT view params live in provenance().
         return {
+            "method": "istft",
             "fft_size": self.stft_params.n_fft,
             "hop_length": self.stft_params.hop_length,
             "window_type": self.stft_params.window,
+        }
+
+    def provenance(self) -> dict:
+        return {
             "cqt_fmin": self.params.fmin,
             "cqt_n_bins": self.params.n_bins,
             "cqt_bins_per_octave": self.params.bins_per_octave,

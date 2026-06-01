@@ -144,3 +144,29 @@ def test_csv_export(tmp_path):
     text = path.read_text()
     assert "source_file" in text.splitlines()[0]
     assert "rec_001.wav" in text
+
+
+def test_reconstruction_record_roundtrips_and_csv_is_hybrid(tmp_path):
+    # Option B: the tagged reconstruction record survives the sidecar round-trip, the
+    # payload carries a schema_version, and the CSV flattens it to the hybrid columns.
+    import json
+
+    from python_ref.annotation import sidecar_path
+    from python_ref.annotation.export import SCHEMA_VERSION
+
+    rec = {"method": "swt_mra", "wavelet": "db4", "level": 8}
+    audio = tmp_path / "rec_001.wav"
+    write_sidecar(audio, [_annotation(reconstruction=rec)])
+
+    payload = json.loads(sidecar_path(audio).read_text())
+    assert payload["schema_version"] == SCHEMA_VERSION
+    assert payload["annotations"][0]["reconstruction"]["method"] == "swt_mra"
+
+    _, anns = read_sidecar(audio)
+    assert anns[0].reconstruction == rec                       # exact round-trip
+
+    csv_path = write_csv(tmp_path / "out.csv", [_annotation(reconstruction=rec)])
+    header = csv_path.read_text().splitlines()[0]
+    assert "recon_method" in header and "recon_params" in header
+    assert "schema_version" in header
+    assert "reconstruction" not in header                      # nested object flattened away

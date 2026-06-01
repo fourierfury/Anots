@@ -79,13 +79,10 @@ class Annotation:
     freq_max_hz: float = 0.0
     mask_type: str = "rectangle"
     extraction_mode: str = ExtractionMode.POSITIVE.value
-    # Reconstruction provenance is populated ONLY when the audio is actually produced via
-    # an STFT (STFT/CQT/chroma views). Wavelet-native views (scalogram) leave these None
-    # and record their true engine in ``transform_params`` — these fields must never assert
-    # an STFT that was not used (design §11; per-domain recon record is the Option-B follow-up).
-    fft_size: int | None = None
-    hop_length: int | None = None
-    window_type: str | None = None
+    # Per-domain reconstruction record: how this clip's audio was produced, as a tagged
+    # ``{"method": ..., ...}`` union (design §11). STFT/CQT/chroma → "istft" + fft/hop/window;
+    # scalogram → "swt_mra" + wavelet/level. Never asserts an engine that was not used.
+    reconstruction: dict = field(default_factory=dict)
     n_mels: int | None = None
     transform_params: dict = field(default_factory=dict)  # view-specific provenance (e.g. CQT fmin/n_bins)
     annotator: str = ""
@@ -135,9 +132,7 @@ class Annotation:
             "freq_max_hz": self.freq_max_hz,
             "mask_type": self.mask_type,
             "extraction_mode": self.extraction_mode,
-            "fft_size": self.fft_size,
-            "hop_length": self.hop_length,
-            "window_type": self.window_type,
+            "reconstruction": self.reconstruction,
             "n_mels": self.n_mels,
             "transform_params": self.transform_params,
             "annotator": self.annotator,

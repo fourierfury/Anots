@@ -2,6 +2,7 @@
 
 from .export import DatasetProfile, read_sidecar, sidecar_path, write_csv, write_sidecar
 from .mask import feather, rectangle_mask
+from .brush import energy_brush
 from .model import Annotation, ExtractionMode, Layer, Tool, layer_color
 from .overlap import OverlapLevel, OverlapWarning, classify, detect_overlaps, iou
 from .padding import PaddingMode, PaddingRecord, pad, preset_samples
@@ -22,6 +23,7 @@ __all__ = [
     "rectangle_mask",
     "ridge_path",
     "tube_mask",
+    "energy_brush",
     "feather",
     "reconstruct",
     "reconstruct_from_signal",

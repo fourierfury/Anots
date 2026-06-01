@@ -22,6 +22,7 @@ from ..annotation import (
     OverlapWarning,
     Tool,
     detect_overlaps,
+    energy_brush,
     feather,
     layer_color,
     pad,
@@ -31,6 +32,7 @@ from ..annotation import (
     write_csv,
     write_sidecar,
 )
+from ..annotation.brush import DEFAULT_RADIUS as BRUSH_RADIUS
 from ..annotation.ridge import MAX_JUMP, SMOOTHNESS, TUBE_WIDTH
 from ..annotation.padding import PaddingMode
 from ..params import STFT, StftParams
@@ -159,14 +161,35 @@ class SpectrogramSession:
         lam: float = SMOOTHNESS,
         width: int = TUBE_WIDTH,
     ) -> Layer:
-        """Follow the maximum-energy ridge between two clicked points (design §6.5).
-
-        Endpoints are given in display units (seconds, Hz); they are mapped through the
-        active transform to ``(frame, freq_bin)``, so the follower works in any view.
-        The resulting soft tube is already tapered, so no extra feathering is applied.
-        """
+        """Follow the maximum-energy ridge between two points given in **Hz** (design §6.5)."""
         start = (self.transform.time_to_col(t0, self.sr), self.transform.value_to_row(f0_hz, self.sr))
         end = (self.transform.time_to_col(t1, self.sr), self.transform.value_to_row(f1_hz, self.sr))
+        return self._add_ridge(start, end, label, label_class, confidence,
+                               extraction_mode, k, lam, width)
+
+    def add_ridge_display(
+        self,
+        t0: float,
+        y0: float,
+        t1: float,
+        y1: float,
+        label: str,
+        label_class: str = "",
+        confidence: float = 1.0,
+        extraction_mode: ExtractionMode = ExtractionMode.POSITIVE,
+        k: int = MAX_JUMP,
+        lam: float = SMOOTHNESS,
+        width: int = TUBE_WIDTH,
+    ) -> Layer:
+        """Ridge between two points in the view's **display** y-units (Hz on STFT, band
+        index on the log views) — what a GUI click provides. See :meth:`add_ridge`."""
+        start = (self.transform.time_to_col(t0, self.sr), self.transform.display_y_to_row(y0, self.sr))
+        end = (self.transform.time_to_col(t1, self.sr), self.transform.display_y_to_row(y1, self.sr))
+        return self._add_ridge(start, end, label, label_class, confidence,
+                               extraction_mode, k, lam, width)
+
+    def _add_ridge(self, start, end, label, label_class, confidence,
+                   extraction_mode, k, lam, width) -> Layer:
         path = ridge_path(np.abs(self.coeffs), start, end, k=k, lam=lam)
         mask = tube_mask(self.coeffs.shape, path, width=width)
         layer = Layer(
@@ -175,6 +198,42 @@ class SpectrogramSession:
             label_class=label_class,
             confidence=confidence,
             tool_used=Tool.RIDGE,
+            extraction_mode=extraction_mode,
+            color=layer_color(len(self.layers)),
+        )
+        self.layers.append(layer)
+        return layer
+
+    def add_brush(
+        self,
+        points: list[tuple[float, float]],
+        label: str,
+        radius: int = BRUSH_RADIUS,
+        threshold_db: float | None = None,
+        label_class: str = "",
+        confidence: float = 1.0,
+        extraction_mode: ExtractionMode = ExtractionMode.POSITIVE,
+        taper_bins: int = 8,
+    ) -> Layer:
+        """Paint a Smart Energy Brush stroke into a new layer (design §6.6).
+
+        ``points`` is the drag path in display units ``(seconds, display_y)`` — Hz on the
+        STFT view, band index on the log views. Each point stamps a circular brush of
+        ``radius`` bins; ``threshold_db`` (if given) restricts the stamp to bins at or
+        above that dB, so the brush grabs only the loud content.
+        """
+        db = self.transform.display_db(self.coeffs)
+        mask = np.zeros(self.coeffs.shape, dtype=np.float64)
+        for t, y in points:
+            center = (self.transform.display_y_to_row(y, self.sr),
+                      self.transform.time_to_col(t, self.sr))
+            mask = energy_brush(db, center, radius, threshold_db, mask)
+        layer = Layer(
+            mask=feather(mask, taper_bins),
+            label=label,
+            label_class=label_class,
+            confidence=confidence,
+            tool_used=Tool.BRUSH,
             extraction_mode=extraction_mode,
             color=layer_color(len(self.layers)),
         )
@@ -200,9 +259,8 @@ class SpectrogramSession:
         return int(start * self.sr), min(int(end * self.sr), len(self.y))
 
     def to_annotations(self) -> list[Annotation]:
-        prov = self.transform.provenance()
-        _RECON = ("fft_size", "hop_length", "window_type")
-        view_params = {k: v for k, v in prov.items() if k not in _RECON}
+        recon = self.transform.reconstruction()       # tagged {"method": ...} record
+        view_params = self.transform.provenance()      # view-only display/selection params
         anns = []
         for layer in self.layers:
             start, end = self._bounds_samples(layer.mask)
@@ -222,12 +280,7 @@ class SpectrogramSession:
                 freq_min_hz=f_lo,
                 freq_max_hz=f_hi,
                 extraction_mode=layer.extraction_mode.value,
-                # No STFT fallback: a view whose provenance omits these reconstructs without
-                # an STFT (e.g. scalogram), so the fields stay None rather than asserting a
-                # window/hop that was never applied.
-                fft_size=prov.get("fft_size"),
-                hop_length=prov.get("hop_length"),
-                window_type=prov.get("window_type"),
+                reconstruction=recon,
                 transform_params=layer_meta,
                 notes=layer.notes,
                 created_at=layer.created_at,

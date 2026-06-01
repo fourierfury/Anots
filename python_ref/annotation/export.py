@@ -12,6 +12,10 @@ from .model import Annotation
 
 SIDECAR_SUFFIX = ".dspws.json"
 
+#: Export schema version. Bump when the sidecar/CSV layout changes incompatibly; readers
+#: branch on it to migrate. 1.0 = per-domain tagged `reconstruction` record (Option B).
+SCHEMA_VERSION = "1.0"
+
 
 @dataclass(frozen=True)
 class DatasetProfile:
@@ -37,6 +41,7 @@ def write_sidecar(
     """Write annotations next to their audio file as ``<audio>.dspws.json``."""
     path = sidecar_path(audio_path)
     payload = {
+        "schema_version": SCHEMA_VERSION,
         "profile": profile.__dict__ if profile else None,
         "annotations": [a.to_dict() for a in annotations],
     }
@@ -51,10 +56,25 @@ def read_sidecar(audio_path: str | Path) -> tuple[DatasetProfile | None, list[An
     return profile, [_annotation_from_dict(d) for d in payload["annotations"]]
 
 
+def _csv_row(d: dict) -> dict:
+    """Flatten one annotation dict for the CSV (hybrid reconstruction representation).
+
+    The nested ``reconstruction`` object becomes a flat ``recon_method`` column (queryable)
+    plus a ``recon_params`` JSON cell (method-specific fields), so new methods add no
+    columns. ``schema_version`` is stamped on every row since CSV has no file-level header.
+    """
+    row = dict(d)
+    recon = row.pop("reconstruction", {}) or {}
+    row["recon_method"] = recon.get("method")
+    row["recon_params"] = json.dumps({k: v for k, v in recon.items() if k != "method"})
+    row["schema_version"] = SCHEMA_VERSION
+    return row
+
+
 def write_csv(path: str | Path, annotations: list[Annotation]) -> Path:
     """Flat one-row-per-annotation CSV for pandas/numpy pipelines (design §10.3)."""
     path = Path(path)
-    rows = [a.to_dict() for a in annotations]
+    rows = [_csv_row(a.to_dict()) for a in annotations]
     if not rows:
         path.write_text("")
         return path

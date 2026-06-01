@@ -34,7 +34,8 @@ def tone() -> np.ndarray:
 
 REQUIRED = (
     "forward", "display_db", "reconstruct",
-    "time_to_col", "col_to_time", "value_to_row", "row_to_value", "provenance",
+    "time_to_col", "col_to_time", "value_to_row", "row_to_value",
+    "reconstruction", "provenance",
 )
 
 
@@ -69,11 +70,14 @@ def test_stft_coord_roundtrips():
     assert tf.value_to_row(tf.row_to_value(64, SR), SR) == 64
 
 
-def test_stft_provenance_records_locked_params():
-    prov = StftTransform(STFT).provenance()
-    assert prov["fft_size"] == STFT.n_fft
-    assert prov["hop_length"] == STFT.hop_length
-    assert prov["window_type"] == STFT.window
+def test_stft_reconstruction_records_locked_params():
+    tf = StftTransform(STFT)
+    rec = tf.reconstruction()
+    assert rec["method"] == "istft"
+    assert rec["fft_size"] == STFT.n_fft
+    assert rec["hop_length"] == STFT.hop_length
+    assert rec["window_type"] == STFT.window
+    assert tf.provenance() == {}  # STFT has no separate view params
 
 
 # --- CQT (Option A: select on CQT, reconstruct through the exact STFT engine) ---
@@ -131,10 +135,12 @@ def test_cqt_selection_isolates_band(harmonic):
     assert e_on > 50 * e_off
 
 
-def test_cqt_provenance_carries_both_view_and_recon_params():
-    prov = CqtTransform().provenance()
-    assert prov["cqt_bins_per_octave"] == 12          # the view
-    assert prov["fft_size"] == STFT.n_fft             # the (true) reconstruction engine
+def test_cqt_separates_view_params_from_reconstruction():
+    tf = CqtTransform()
+    assert tf.provenance()["cqt_bins_per_octave"] == 12   # the view (display/selection)
+    rec = tf.reconstruction()                             # the (true) reconstruction engine
+    assert rec["method"] == "istft" and rec["fft_size"] == STFT.n_fft
+    assert "cqt_fmin" not in rec                          # view params don't leak into recon
 
 
 # --- Chroma (pitch-class comb, Option 1 metadata) ---
@@ -290,10 +296,13 @@ def test_scalogram_handles_arbitrary_length():
     assert np.max(np.abs(coeffs.sum(axis=0) - y)) < 1e-9
 
 
-def test_scalogram_provenance_records_wavelet():
-    prov = ScalogramTransform().provenance()
-    assert prov["scalogram_wavelet"] == "db4"
-    assert prov["scalogram_level"] == 8
+def test_scalogram_reconstruction_records_wavelet():
+    tf = ScalogramTransform()
+    rec = tf.reconstruction()
+    assert rec["method"] == "swt_mra"
+    assert rec["wavelet"] == "db4" and rec["level"] == 8
+    assert "fft_size" not in rec       # wavelet-native: never asserts an STFT
+    assert tf.provenance() == {}       # wavelet/level live in the reconstruction record
 
 
 def test_display_y_to_row_inverts_per_view():
@@ -310,10 +319,9 @@ def test_display_y_to_row_inverts_per_view():
     assert ChromaTransform().display_y_to_row(9.2, 22_050) == 9
 
 
-def test_annotation_recon_fields_are_honest_per_view():
-    # Flag-2 Option A: STFT-bridged views record real fft params; the wavelet-native
-    # scalogram leaves them None (never asserts an STFT it didn't use) and carries its
-    # true engine in transform_params.
+def test_annotation_reconstruction_record_is_honest_per_view():
+    # Option B: each annotation carries a tagged reconstruction record naming the true
+    # engine — never an STFT for a wavelet-native view.
     from python_ref.gui.session import SpectrogramSession
 
     t = np.arange(16_384) / SR
@@ -322,10 +330,12 @@ def test_annotation_recon_fields_are_honest_per_view():
     stft_sess = SpectrogramSession(y, SR)
     stft_sess.add_rectangle(0.05, 0.30, 1000, 5000, label="e")
     a_stft = stft_sess.to_annotations()[0]
-    assert a_stft.fft_size == STFT.n_fft and a_stft.window_type == STFT.window
+    assert a_stft.reconstruction["method"] == "istft"
+    assert a_stft.reconstruction["fft_size"] == STFT.n_fft
 
     scal_sess = SpectrogramSession(y, SR, transform=ScalogramTransform())
     scal_sess.add_rectangle(0.05, 0.30, 1000, 5000, label="e")
     a_scal = scal_sess.to_annotations()[0]
-    assert a_scal.fft_size is None and a_scal.hop_length is None and a_scal.window_type is None
-    assert a_scal.transform_params["scalogram_wavelet"] == "db4"
+    assert a_scal.reconstruction["method"] == "swt_mra"
+    assert a_scal.reconstruction["wavelet"] == "db4"
+    assert "fft_size" not in a_scal.reconstruction     # never asserts an STFT it didn't use

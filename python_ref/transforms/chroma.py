@@ -110,11 +110,17 @@ class ChromaTransform(Transform):
                          key=lambda c: PITCH_CLASSES.index(c))
         return {"pitch_classes": classes}
 
-    def provenance(self) -> dict:
+    def reconstruction(self) -> dict:
+        # Chroma reconstructs through the exact STFT comb (§11): an honest ISTFT record.
         return {
+            "method": "istft",
             "fft_size": self.stft_params.n_fft,
             "hop_length": self.stft_params.hop_length,
             "window_type": self.stft_params.window,
+        }
+
+    def provenance(self) -> dict:
+        return {
             "chroma_n_chroma": self.params.n_chroma,
             "chroma_bins_per_octave": self.params.bins_per_octave,
         }
