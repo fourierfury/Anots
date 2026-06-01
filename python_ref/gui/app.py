@@ -13,6 +13,7 @@ from matplotlib.widgets import RectangleSelector
 from PyQt6 import QtWidgets
 
 from ..params import STFT
+from ..transforms import TRANSFORMS
 from .render import SpectrogramRenderer
 from .session import SpectrogramSession
 
@@ -77,9 +78,11 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         if self._selection is None or not self.label_edit.text():
             self.status.setText("Need a selection and a label.")
             return
-        t0, t1, f0, f1 = self._selection
-        layer = self.session.add_rectangle(
-            t0, t1, f0, f1, self.label_edit.text(), confidence=self.confidence.value()
+        t0, t1, y0, y1 = self._selection
+        # The selection is in the view's display y-units (Hz for STFT, band index for the
+        # log views); add_rectangle_display resolves either to the right rows.
+        layer = self.session.add_rectangle_display(
+            t0, t1, y0, y1, self.label_edit.text(), confidence=self.confidence.value()
         )
         self._overlay(layer)
         self.status.setText(f"Added '{layer.label}' ({len(self.session.layers)} layers).")
@@ -114,9 +117,17 @@ def plt_rect(xy, w, h, color):
     return Rectangle(xy, w, h, fill=False, edgecolor=color, linewidth=1.5)
 
 
-def run(path: str) -> int:
+def build_session(path: str, view: str = "stft") -> SpectrogramSession:
+    """Load ``path`` into a session backed by the named transform view (design §4.3)."""
+    if view not in TRANSFORMS:
+        raise SystemExit(f"unknown view {view!r}; choose from {', '.join(TRANSFORMS)}")
+    transform = TRANSFORMS[view]()  # each view carries its own locked default params
+    return SpectrogramSession.load(path, STFT, transform=transform)
+
+
+def run(path: str, view: str = "stft") -> int:
     app = QtWidgets.QApplication(sys.argv)
-    window = AnnotatorWindow(SpectrogramSession.load(path, STFT))
+    window = AnnotatorWindow(build_session(path, view))
     window.resize(1100, 650)
     window.show()
     return app.exec()

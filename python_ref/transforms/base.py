@@ -98,3 +98,13 @@ class Transform(ABC):
     def row_to_display_y(self, row: int, sr: int) -> float:
         """A row's position in the displayed y-axis (Hz for STFT; see CQT override)."""
         return self.row_to_value(row, sr)
+
+    def display_y_to_row(self, y_display: float, sr: int) -> int:
+        """Inverse of :meth:`row_to_display_y`: a displayed y-value -> coefficient row.
+
+        This is what a GUI selection needs. The default assumes the display y-axis IS the
+        value axis (Hz), so it routes through :meth:`value_to_row`. Log-scale views whose
+        display axis is a bin/band index (CQT, chroma, scalogram) override this to round the
+        index directly — their y-axis is not Hz, so ``value_to_row`` would be wrong.
+        """
+        return self.value_to_row(y_display, sr)

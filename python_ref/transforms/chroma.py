@@ -93,6 +93,10 @@ class ChromaTransform(Transform):
     def row_to_display_y(self, row: int, sr: int) -> float:
         return float(row)
 
+    def display_y_to_row(self, y_display: float, sr: int) -> int:
+        # Display y is the pitch-class row index, not Hz.
+        return int(np.clip(round(y_display), 0, self.params.n_chroma - 1))
+
     def y_extent(self, coeffs: np.ndarray, sr: int) -> tuple[float, float]:
         return (0.0, float(self.params.n_chroma))
 

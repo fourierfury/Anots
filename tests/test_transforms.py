@@ -296,6 +296,20 @@ def test_scalogram_provenance_records_wavelet():
     assert prov["scalogram_level"] == 8
 
 
+def test_display_y_to_row_inverts_per_view():
+    # STFT: the display y-axis IS Hz, so it routes through value_to_row.
+    stft = StftTransform()
+    assert stft.display_y_to_row(1000.0, SR) == stft.value_to_row(1000.0, SR)
+
+    # Log views: the display y-axis is a bin/band index — round + clamp, NOT Hz.
+    scal = ScalogramTransform()
+    assert scal.display_y_to_row(3.4, SR) == 3
+    assert scal.display_y_to_row(999.0, SR) == scal.params.level      # clamp high
+    assert scal.display_y_to_row(-5.0, SR) == 0                       # clamp low
+    assert CqtTransform().display_y_to_row(12.6, 22_050) == 13
+    assert ChromaTransform().display_y_to_row(9.2, 22_050) == 9
+
+
 def test_annotation_recon_fields_are_honest_per_view():
     # Flag-2 Option A: STFT-bridged views record real fft params; the wavelet-native
     # scalogram leaves them None (never asserts an STFT it didn't use) and carries its

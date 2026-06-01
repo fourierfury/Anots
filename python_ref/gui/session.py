@@ -60,9 +60,14 @@ class SpectrogramSession:
         return self.coeffs
 
     @classmethod
-    def load(cls, path: str | Path, params: StftParams = STFT) -> "SpectrogramSession":
+    def load(
+        cls,
+        path: str | Path,
+        params: StftParams = STFT,
+        transform: Transform | None = None,
+    ) -> "SpectrogramSession":
         y, sr = librosa.load(str(path), sr=None, mono=True)
-        return cls(y, int(sr), source_file=str(path), params=params)
+        return cls(y, int(sr), source_file=str(path), params=params, transform=transform)
 
     @property
     def duration_s(self) -> float:
@@ -84,14 +89,50 @@ class SpectrogramSession:
         extraction_mode: ExtractionMode = ExtractionMode.POSITIVE,
         taper_bins: int = 8,
     ) -> Layer:
-        """Create a feathered rectangular layer from a time/frequency selection."""
+        """Create a feathered rectangular layer from a time / **Hz** selection."""
+        bins = (self.transform.value_to_row(f0_hz, self.sr),
+                self.transform.value_to_row(f1_hz, self.sr))
+        return self._add_rectangle(t0, t1, bins, label, label_class, confidence,
+                                   extraction_mode, taper_bins)
+
+    def add_rectangle_display(
+        self,
+        t0: float,
+        t1: float,
+        y0: float,
+        y1: float,
+        label: str,
+        label_class: str = "",
+        confidence: float = 1.0,
+        extraction_mode: ExtractionMode = ExtractionMode.POSITIVE,
+        taper_bins: int = 8,
+    ) -> Layer:
+        """Create a layer from a selection in the view's **display** y-units.
+
+        The GUI works in display coordinates: Hz on the STFT view, but a bin/band index
+        on the log-scale views (CQT, chroma, scalogram). ``display_y_to_row`` resolves
+        either to the right coefficient row, so one rectangle drag works in every view.
+        """
+        bins = (self.transform.display_y_to_row(y0, self.sr),
+                self.transform.display_y_to_row(y1, self.sr))
+        return self._add_rectangle(t0, t1, bins, label, label_class, confidence,
+                                   extraction_mode, taper_bins)
+
+    def _add_rectangle(
+        self,
+        t0: float,
+        t1: float,
+        bins: tuple[int, int],
+        label: str,
+        label_class: str,
+        confidence: float,
+        extraction_mode: ExtractionMode,
+        taper_bins: int,
+    ) -> Layer:
         frames = sorted((self.transform.time_to_col(t0, self.sr),
                          self.transform.time_to_col(t1, self.sr)))
-        bins = sorted((self.transform.value_to_row(f0_hz, self.sr),
-                       self.transform.value_to_row(f1_hz, self.sr)))
-
         mask = rectangle_mask(self.coeffs.shape[0], self.coeffs.shape[1],
-                              freq_bins=tuple(bins), frame_bins=tuple(frames))
+                              freq_bins=tuple(sorted(bins)), frame_bins=tuple(frames))
         layer = Layer(
             mask=feather(mask, taper_bins),
             label=label,
@@ -198,15 +239,27 @@ class SpectrogramSession:
         out_dir: str | Path,
         pad_to: int | None = None,
         pad_mode: PaddingMode = PaddingMode.END,
+        context_ms: float = 0.0,
     ) -> list[Annotation]:
-        """Write each layer's clip (raw and optionally padded) plus a sidecar + CSV."""
+        """Write each layer's clip (raw and optionally padded) plus a sidecar + CSV.
+
+        The raw clip is **cropped to the event's time bounds** (the annotation's
+        ``[start_sample, end_sample]``) — clean clip boundaries for ML extraction
+        (design §10.5), not the whole recording. ``context_ms`` keeps an optional
+        symmetric margin of surrounding audio (0 = sample-tight event). Padding, when
+        requested, normalises the *cropped* clip's duration.
+        """
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
         stem = Path(self.source_file).stem or "clip"
+        margin = int(round(context_ms / 1000.0 * self.sr))
 
         annotations = self.to_annotations()
         for i, (layer, ann) in enumerate(zip(self.layers, annotations)):
-            clip = self.reconstruct_layer(layer)
+            full = self.reconstruct_layer(layer)
+            lo = max(0, ann.start_sample - margin)
+            hi = min(len(full), ann.end_sample + margin)
+            clip = full[lo:hi]
             raw_path = out / f"{stem}_{i:03d}_raw.wav"
             sf.write(raw_path, clip.astype(np.float32), self.sr, subtype="FLOAT")
             ann.exported_clip_raw = str(raw_path)
