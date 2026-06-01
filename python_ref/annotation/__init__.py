@@ -3,8 +3,10 @@
 from .export import DatasetProfile, read_sidecar, sidecar_path, write_csv, write_sidecar
 from .mask import feather, rectangle_mask
 from .model import Annotation, ExtractionMode, Layer, Tool, layer_color
+from .overlap import OverlapLevel, OverlapWarning, classify, detect_overlaps, iou
 from .padding import PaddingMode, PaddingRecord, pad, preset_samples
 from .reconstruct import reconstruct, reconstruct_from_signal
+from .ridge import ridge_path, tube_mask
 
 __all__ = [
     "Annotation",
@@ -12,7 +14,14 @@ __all__ = [
     "Tool",
     "ExtractionMode",
     "layer_color",
+    "iou",
+    "classify",
+    "detect_overlaps",
+    "OverlapLevel",
+    "OverlapWarning",
     "rectangle_mask",
+    "ridge_path",
+    "tube_mask",
     "feather",
     "reconstruct",
     "reconstruct_from_signal",

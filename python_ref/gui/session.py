@@ -19,14 +19,19 @@ from ..annotation import (
     DatasetProfile,
     ExtractionMode,
     Layer,
+    OverlapWarning,
     Tool,
+    detect_overlaps,
     feather,
     layer_color,
     pad,
     rectangle_mask,
+    ridge_path,
+    tube_mask,
     write_csv,
     write_sidecar,
 )
+from ..annotation.ridge import MAX_JUMP, SMOOTHNESS, TUBE_WIDTH
 from ..annotation.padding import PaddingMode
 from ..params import STFT, StftParams
 from ..transforms import StftTransform, Transform
@@ -99,10 +104,50 @@ class SpectrogramSession:
         self.layers.append(layer)
         return layer
 
+    def add_ridge(
+        self,
+        t0: float,
+        f0_hz: float,
+        t1: float,
+        f1_hz: float,
+        label: str,
+        label_class: str = "",
+        confidence: float = 1.0,
+        extraction_mode: ExtractionMode = ExtractionMode.POSITIVE,
+        k: int = MAX_JUMP,
+        lam: float = SMOOTHNESS,
+        width: int = TUBE_WIDTH,
+    ) -> Layer:
+        """Follow the maximum-energy ridge between two clicked points (design §6.5).
+
+        Endpoints are given in display units (seconds, Hz); they are mapped through the
+        active transform to ``(frame, freq_bin)``, so the follower works in any view.
+        The resulting soft tube is already tapered, so no extra feathering is applied.
+        """
+        start = (self.transform.time_to_col(t0, self.sr), self.transform.value_to_row(f0_hz, self.sr))
+        end = (self.transform.time_to_col(t1, self.sr), self.transform.value_to_row(f1_hz, self.sr))
+        path = ridge_path(np.abs(self.coeffs), start, end, k=k, lam=lam)
+        mask = tube_mask(self.coeffs.shape, path, width=width)
+        layer = Layer(
+            mask=mask,
+            label=label,
+            label_class=label_class,
+            confidence=confidence,
+            tool_used=Tool.RIDGE,
+            extraction_mode=extraction_mode,
+            color=layer_color(len(self.layers)),
+        )
+        self.layers.append(layer)
+        return layer
+
     def reconstruct_layer(self, layer: Layer) -> np.ndarray:
         return self.transform.reconstruct(
             self.y, self.coeffs, layer.mask, layer.extraction_mode, self.sr, length=len(self.y)
         )
+
+    def overlaps(self, threshold: float = 0.0) -> list[OverlapWarning]:
+        """Pairwise IoU overlap warnings across the current layers (design §5.4)."""
+        return detect_overlaps(self.layers, threshold)
 
     def _bounds_samples(self, mask: np.ndarray) -> tuple[int, int]:
         """Sample range covered by a layer's active frames."""
